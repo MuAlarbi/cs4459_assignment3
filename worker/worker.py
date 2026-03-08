@@ -1,9 +1,10 @@
 """
 CS 4459: Assignment 3 — Worker Service
-Distributed Order Processing with Ticket-Based Coordination
+Distributed Order Processing with Message-Based Coordination
 
 Each worker is a FastAPI microservice that coordinates with peers
-to ensure mutual exclusion when accessing the inventory service.
+using REQUEST/REPLY messages and Lamport logical clocks to ensure
+mutual exclusion when accessing the inventory service.
 """
 
 from fastapi import FastAPI
@@ -27,11 +28,20 @@ def get_peer_url(worker_id: int) -> str:
 
 
 # --- Coordination State ---
-# Use state_lock to protect reads/writes to choosing and ticket.
-# GET /state runs in a different thread than POST /start.
+# Use state_lock to protect all coordination state.
+# Multiple threads access this state: the /start processing loop,
+# the /request handler, and the /reply handler.
+
 state_lock = threading.Lock()
-choosing = False
-ticket = 0
+clock = 0
+state = "RELEASED"          # "RELEASED", "WANTED", or "HELD"
+request_timestamp = None    # Clock value when we requested access
+replies_received = 0        # Count of REPLY messages for current request
+deferred_queue = []         # Worker IDs whose REPLY we deferred
+
+# Event to signal when all replies have been received.
+# acquire() waits on this; the /reply handler sets it.
+all_replies = threading.Event()
 
 
 # ============================================================
@@ -40,25 +50,11 @@ ticket = 0
 
 # --- Coordination Functions ---
 
-def select_ticket():
-    """
-    Rule 1: Select a ticket number.
-    """
-    # TODO
-    pass
-
-
-def wait_for_turn():
-    """
-    Rule 2: Wait until it's safe to enter the critical section.
-    """
-    # TODO
-    pass
-
-
 def acquire():
     """
-    Acquire access to the critical section.
+    Rule 1: Request access to the critical section.
+    Sets state to WANTED, increments clock, records timestamp,
+    sends REQUEST to all peers, waits for N-1 REPLYs.
     """
     # TODO
     pass
@@ -67,15 +63,31 @@ def acquire():
 def release():
     """
     Rule 4: Release access to the critical section.
+    Sets state to RELEASED, sends REPLY to all deferred peers.
     """
     # TODO
     pass
 
 
-# --- Endpoints ---
+# --- Message Handlers ---
+
+# TODO: Implement POST /request
+# Receives: {"timestamp": int, "sender_id": int}
+# Rule 2: Decide whether to reply immediately or defer.
+
+
+# TODO: Implement POST /reply
+# Receives: {"timestamp": int, "sender_id": int}
+# Rule 3: Update clock, increment replies_received.
+# If replies_received == NUM_WORKERS - 1, signal all_replies.
+
+
+# --- Other Endpoints ---
 
 # TODO: Implement GET /state
-# Must return: {"worker_id": ..., "choosing": ..., "ticket": ...}
+# Must return: {"worker_id": ..., "clock": ..., "state": ...,
+#               "request_timestamp": ..., "replies_received": ...,
+#               "deferred_count": ...}
 
 
 # TODO: Implement POST /start
